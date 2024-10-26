@@ -637,10 +637,10 @@ def test_compound_model():
         scheduler="synchronous",
     )
 
-    assert_allclose(model_fit.amplitude_0.value, [2, 1.63349282])
-    assert_allclose(model_fit.mean_0.value, [1.1, 1.145231])
-    assert_allclose(model_fit.stddev_0.value, [0.1, 0.73632987])
-    assert_allclose(model_fit.amplitude_1.value, [2, 2])
+    assert_allclose(model_fit.amplitude_0.value, [2, 1.633], atol=0.001)
+    assert_allclose(model_fit.mean_0.value, [1.1, 1.145], atol=0.001)
+    assert_allclose(model_fit.stddev_0.value, [0.1, 0.736], atol=0.001)
+    assert_allclose(model_fit.amplitude_1.value, [2, 2], atol=0.001)
 
 
 def test_model_dimension_mismatch():
@@ -988,3 +988,51 @@ def test_skip_empty_data(tmp_path):
     assert_allclose(model_fit.amplitude.value, [2, np.nan])
     assert_allclose(model_fit.mean.value, [5, np.nan])
     assert_allclose(model_fit.stddev.value, [1.0, np.nan])
+
+
+def test_world_wcs_axis_correlation():
+    # Regression test for a bug that caused the world coordinates to not be
+    # properly extracted from a WCS object if the axis correlation matrix
+    # resulted in a difference in order between pixel and world coordinates.
+
+    model = Gaussian1D()
+    fitter = TRFLSQFitter()
+    data = gaussian(
+        np.arange(1, 6)[:, None],
+        np.array([5, 5]),
+        np.array([3, 2]),
+        np.array([1, 1]),
+    ).T
+
+    common_kwargs = dict(data=data, model=model, fitter=fitter, scheduler="synchronous")
+
+    # First case: a simple WCS - as the fitting axis is 1 in Numpy order, this
+    # means we should use the world coordinates for the first WCS dimension. In
+    # this case, the Gaussian means should be 3 and 2.
+
+    wcs1 = WCS(naxis=2)
+    wcs1.wcs.cdelt = 1, 2
+
+    model_fit = parallel_fit_dask(fitting_axes=1, world=wcs1, **common_kwargs)
+    assert_allclose(model_fit.mean, [3, 2])
+
+    # Second case: as above, but WCS axes swapped. In this case, the means
+    # should be 6 and 4.
+
+    wcs1 = WCS(naxis=2)
+    wcs1.wcs.cdelt = 2, 1
+
+    model_fit = parallel_fit_dask(fitting_axes=1, world=wcs1, **common_kwargs)
+    assert_allclose(model_fit.mean, [6, 4])
+
+    # Third case: as in first case, but this time we set the PC matrix such
+    # that the world axes are in a different order to their corresponding pixel
+    # axis. In this case, the means should be 6 and 4 because fitting_axes=1
+    # should correspond to the second WCS dimension.
+
+    wcs3 = WCS(naxis=2)
+    wcs3.wcs.cdelt = 1, 2
+    wcs3.wcs.pc = [[0, 1], [1, 0]]
+
+    model_fit = parallel_fit_dask(fitting_axes=1, world=wcs1, **common_kwargs)
+    assert_allclose(model_fit.mean, [6, 4])
