@@ -228,7 +228,7 @@ def lombscargle(
             kwds.update(assume_regular_frequency=True)
         else:
             kwds.update(assume_regular_frequency=False)
-            
+
     # only chi2 methods support nterms
     if not method.endswith("chi2"):
         if kwds.pop("nterms") != 1:
