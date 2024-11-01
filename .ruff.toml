@@ -117,7 +117,6 @@ lint.ignore = [
 
     # flake8-pytest-style (PT)
     "PT003",   # pytest-extraneous-scope-function
-    "PT004",   # pytest-missing-fixture-name-underscore # deprecated in ruff 0.6.0
     "PT006",   # pytest-parametrize-names-wrong-type
     "PT007",   # pytest-parametrize-values-wrong-type
     "PT011",   # pytest-raises-too-broad
@@ -194,7 +193,7 @@ lint.unfixable = [
 ]
 
 [lint.extend-per-file-ignores]
-"__init__.py" = ["E402", "F401", "F403"]
+"__init__.py" = ["E402", "F401"]
 "test_*.py" = [
     "PTH", # all flake8-use-pathlib
     "RUF015",  # Prefer next({iterable}) over single element slice

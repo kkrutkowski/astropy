@@ -93,6 +93,8 @@ __doctest_skip__ = [
     "Table.convert_unicode_to_bytestring",
 ]
 
+__doctest_requires__ = {("Table.from_pandas", "Table.to_pandas"): ["pandas"]}
+
 _pprint_docs = """
     {__doc__}
 
@@ -406,7 +408,7 @@ class TableAttribute(MetaAttribute):
       >>> t.identifier
       10
       >>> t.meta
-      OrderedDict([('__attributes__', {'identifier': 10})])
+      {'__attributes__': {'identifier': 10}}
     """
 
 
@@ -1795,7 +1797,15 @@ class Table:
 
         """
         if backend == "ipydatagrid":
-            from astropy.table.notebook_backends import ipydatagrid
+            try:
+                import pandas  # noqa: F401
+
+                from astropy.table.notebook_backends import ipydatagrid
+            except ImportError:
+                raise ImportError(
+                    "The default option for show_in_notebook now requires pandas "
+                    "and ipydatagrid to also be installed, or please consider using the astropy[jupyter] extras"
+                ) from None
 
             func = ipydatagrid
 
