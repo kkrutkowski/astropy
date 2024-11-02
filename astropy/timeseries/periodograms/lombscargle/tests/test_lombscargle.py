@@ -7,7 +7,17 @@ from astropy.tests.helper import assert_quantity_allclose
 from astropy.time import Time, TimeDelta
 from astropy.timeseries.periodograms.lombscargle import LombScargle
 
-ALL_METHODS = LombScargle.available_methods
+try:
+    import pyximport
+    pyximport.install(reload_support=True, language_level=3, setup_args={"include_dirs": [np.get_include()]})
+    from ..implementations import cython_impl as cython_impl
+    # Append the Cython method to available methods if import succeeds
+    ALL_METHODS = LombScargle.available_methods + ["cython_impl"]
+except:
+    # Fallback: use only the original methods if import fails
+    ALL_METHODS = LombScargle.available_methods
+
+#ALL_METHODS = LombScargle.available_methods
 ALL_METHODS_NO_AUTO = [method for method in ALL_METHODS if method != "auto"]
 FAST_METHODS = [method for method in ALL_METHODS if "fast" in method]
 NTERMS_METHODS = [method for method in ALL_METHODS if "chi2" in method]
