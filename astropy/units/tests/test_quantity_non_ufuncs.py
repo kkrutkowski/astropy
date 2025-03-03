@@ -28,6 +28,7 @@ from astropy.utils.compat import (
     NUMPY_LT_1_25,
     NUMPY_LT_2_0,
     NUMPY_LT_2_1,
+    NUMPY_LT_2_2,
 )
 
 if TYPE_CHECKING:
@@ -1280,10 +1281,52 @@ class TestNanFunctions(InvariantUnitTestSetup):
     def test_nanstd(self):
         self.check(np.nanstd)
 
+    @pytest.mark.parametrize(
+        "out_init",
+        [
+            pytest.param(u.Quantity(-1, "m"), id="out with correct unit"),
+            # this should work too: out.unit will be overridden
+            pytest.param(u.Quantity(-1), id="out with a different unit"),
+        ],
+    )
+    def test_nanstd_out(self, out_init):
+        out = out_init.copy()
+        o = np.nanstd(self.q, out=out)
+        assert o is out
+        assert o == np.nanstd(self.q)
+
+        # Also check array input, Quantity output.
+        out = out_init.copy()
+        o2 = np.nanstd(self.q.value, out=out)
+        assert o2 is out
+        assert o2.unit == u.dimensionless_unscaled
+        assert o2 == np.nanstd(self.q.value)
+
     def test_nanvar(self):
         out = np.nanvar(self.q)
         expected = np.nanvar(self.q.value) * self.q.unit**2
         assert np.all(out == expected)
+
+    @pytest.mark.parametrize(
+        "out_init",
+        [
+            pytest.param(u.Quantity(-1, "m"), id="out with correct unit"),
+            # this should work too: out.unit will be overridden
+            pytest.param(u.Quantity(-1), id="out with a different unit"),
+        ],
+    )
+    def test_nanvar_out(self, out_init):
+        out = out_init.copy()
+        o = np.nanvar(self.q, out=out)
+        assert o is out
+        assert o == np.nanvar(self.q)
+
+        # Also check array input, Quantity output.
+        out = out_init.copy()
+        o2 = np.nanvar(self.q.value, out=out)
+        assert o2 is out
+        assert o2.unit == u.dimensionless_unscaled
+        assert o2 == np.nanvar(self.q.value)
 
     def test_nanprod(self):
         with pytest.raises(u.UnitsError):
@@ -2663,22 +2706,22 @@ class TestRecFunctions:
     tested_module = np.lib.recfunctions
 
     @classmethod
-    def setup_class(self):
-        self.pv_dtype = np.dtype([("p", "f8"), ("v", "f8")])
-        self.pv_t_dtype = np.dtype(
+    def setup_class(cls):
+        cls.pv_dtype = np.dtype([("p", "f8"), ("v", "f8")])
+        cls.pv_t_dtype = np.dtype(
             [("pv", np.dtype([("pp", "f8"), ("vv", "f8")])), ("t", "f8")]
         )
 
-        self.pv = np.array([(1.0, 0.25), (2.0, 0.5), (3.0, 0.75)], self.pv_dtype)
-        self.pv_t = np.array(
-            [((4.0, 2.5), 0.0), ((5.0, 5.0), 1.0), ((6.0, 7.5), 2.0)], self.pv_t_dtype
+        cls.pv = np.array([(1.0, 0.25), (2.0, 0.5), (3.0, 0.75)], cls.pv_dtype)
+        cls.pv_t = np.array(
+            [((4.0, 2.5), 0.0), ((5.0, 5.0), 1.0), ((6.0, 7.5), 2.0)], cls.pv_t_dtype
         )
 
-        self.pv_unit = u.StructuredUnit((u.km, u.km / u.s), ("p", "v"))
-        self.pv_t_unit = u.StructuredUnit((self.pv_unit, u.s), ("pv", "t"))
+        cls.pv_unit = u.StructuredUnit((u.km, u.km / u.s), ("p", "v"))
+        cls.pv_t_unit = u.StructuredUnit((cls.pv_unit, u.s), ("pv", "t"))
 
-        self.q_pv = self.pv << self.pv_unit
-        self.q_pv_t = self.pv_t << self.pv_t_unit
+        cls.q_pv = cls.pv << cls.pv_unit
+        cls.q_pv_t = cls.pv_t << cls.pv_t_unit
 
     def test_structured_to_unstructured(self):
         # can't unstructure something with incompatible units
@@ -2798,9 +2841,9 @@ class TestRecFunctions:
 all_wrapped_functions = get_wrapped_functions(
     np, np.fft, np.linalg, np.lib.recfunctions
 )
-all_wrapped_functions |= (
-    SUPPORTED_NEP35_FUNCTIONS  # ref https://github.com/numpy/numpy/issues/27451
-)
+if NUMPY_LT_2_2:
+    # ref https://github.com/numpy/numpy/issues/27451
+    all_wrapped_functions |= SUPPORTED_NEP35_FUNCTIONS
 tested_functions = get_covered_functions(locals())
 untested_functions = set()
 deprecated_functions = set()

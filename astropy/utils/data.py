@@ -13,9 +13,6 @@ import io
 import os
 import re
 import shutil
-
-# import ssl moved inside functions using ssl to avoid import failure
-# when running in pyodide/Emscripten
 import sys
 import urllib.error
 import urllib.parse
@@ -23,6 +20,7 @@ import urllib.request
 import zipfile
 from importlib import import_module
 from tempfile import NamedTemporaryFile, TemporaryDirectory, gettempdir
+from types import MappingProxyType
 from warnings import warn
 
 import astropy_iers_data
@@ -40,33 +38,33 @@ from astropy.utils.introspection import find_current_module
 
 # Order here determines order in the autosummary
 __all__ = [
+    "CacheDamaged",
+    "CacheMissingWarning",
     "Conf",
+    "cache_contents",
+    "cache_total_size",
+    "check_download_cache",
+    "check_free_space_in_dir",
+    "clear_download_cache",
+    "compute_hash",
     "conf",
     "download_file",
     "download_files_in_parallel",
-    "get_readable_fileobj",
-    "get_pkg_data_fileobj",
-    "get_pkg_data_filename",
-    "get_pkg_data_contents",
-    "get_pkg_data_fileobjs",
-    "get_pkg_data_filenames",
-    "get_pkg_data_path",
-    "is_url",
-    "is_url_in_cache",
-    "get_cached_urls",
-    "cache_total_size",
-    "cache_contents",
     "export_download_cache",
+    "get_cached_urls",
+    "get_file_contents",
+    "get_free_space_in_dir",
+    "get_pkg_data_contents",
+    "get_pkg_data_filename",
+    "get_pkg_data_filenames",
+    "get_pkg_data_fileobj",
+    "get_pkg_data_fileobjs",
+    "get_pkg_data_path",
+    "get_readable_fileobj",
     "import_download_cache",
     "import_file_to_cache",
-    "check_download_cache",
-    "clear_download_cache",
-    "compute_hash",
-    "get_free_space_in_dir",
-    "check_free_space_in_dir",
-    "get_file_contents",
-    "CacheMissingWarning",
-    "CacheDamaged",
+    "is_url",
+    "is_url_in_cache",
 ]
 
 _dataurls_to_alias = {}
@@ -1550,6 +1548,10 @@ def download_file(
                 e.reason.strerror = f"{e.reason.strerror}. requested URL: {remote_url}"
                 e.reason.args = (e.reason.errno, e.reason.strerror)
             errors[source_url] = e
+
+        except TimeoutError as e:
+            errors[source_url] = e
+
     else:  # No success
         if not sources:
             raise KeyError(
@@ -1915,12 +1917,7 @@ def _url_to_dirname(url):
     return hashlib.md5(url_c.encode("utf-8"), usedforsecurity=False).hexdigest()
 
 
-class ReadOnlyDict(dict):
-    def __setitem__(self, key, value):
-        raise TypeError("This object is read-only.")
-
-
-_NOTHING = ReadOnlyDict({})
+_NOTHING = MappingProxyType({})
 
 
 class CacheDamaged(ValueError):
@@ -2185,7 +2182,7 @@ def cache_contents(pkgname="astropy"):
                     os.path.join(dldir, entry.name, "url"), encoding="utf-8"
                 )
                 r[url] = os.path.abspath(os.path.join(dldir, entry.name, "contents"))
-    return ReadOnlyDict(r)
+    return MappingProxyType(r)
 
 
 def export_download_cache(

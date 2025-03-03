@@ -3,11 +3,11 @@
 import concurrent.futures
 import inspect
 import pickle
-from contextlib import nullcontext
+import sys
 
 import pytest
 
-from astropy.tests.helper import PYTEST_LT_8_0
+from astropy.tests.helper import _skip_docstring_tests_with_optimized_python
 from astropy.utils.decorators import (
     classproperty,
     deprecated,
@@ -416,19 +416,14 @@ def test_deprecated_argument_relaxed():
     assert len(w) == 1
 
     # Using both. Both keyword
-    if PYTEST_LT_8_0:
-        ctx = nullcontext()
-    else:
-        ctx = pytest.warns(AstropyDeprecationWarning)
-
-    with ctx, pytest.warns(AstropyUserWarning) as w:
+    with pytest.warns(AstropyDeprecationWarning), pytest.warns(AstropyUserWarning) as w:
         assert test(clobber=2, overwrite=1) == 1
     assert len(w) == 2
     assert '"clobber" was deprecated' in str(w[0].message)
     assert '"clobber" and "overwrite" keywords were set' in str(w[1].message)
 
     # One positional, one keyword
-    with ctx, pytest.warns(AstropyUserWarning) as w:
+    with pytest.warns(AstropyDeprecationWarning), pytest.warns(AstropyUserWarning) as w:
         assert test(1, clobber=2) == 1
     assert len(w) == 2
     assert '"clobber" was deprecated' in str(w[0].message)
@@ -470,20 +465,15 @@ def test_deprecated_argument_multi_deprecation():
     assert len(w) == 3
 
     # Make sure relax is valid for all arguments
-    if PYTEST_LT_8_0:
-        ctx = nullcontext()
-    else:
-        ctx = pytest.warns(AstropyDeprecationWarning)
-
-    with ctx, pytest.warns(AstropyUserWarning) as w:
+    with pytest.warns(AstropyDeprecationWarning), pytest.warns(AstropyUserWarning) as w:
         assert test(x=1, y=2, z=3, b=3) == (1, 3, 3)
     assert len(w) == 4
 
-    with ctx, pytest.warns(AstropyUserWarning) as w:
+    with pytest.warns(AstropyDeprecationWarning), pytest.warns(AstropyUserWarning) as w:
         assert test(x=1, y=2, z=3, a=3) == (3, 2, 3)
     assert len(w) == 4
 
-    with ctx, pytest.warns(AstropyUserWarning) as w:
+    with pytest.warns(AstropyDeprecationWarning), pytest.warns(AstropyUserWarning) as w:
         assert test(x=1, y=2, z=3, c=5) == (1, 2, 5)
     assert len(w) == 4
 
@@ -495,21 +485,15 @@ def test_deprecated_argument_multi_deprecation_2():
     def test(a, b, c):
         return a, b, c
 
-    if PYTEST_LT_8_0:
-        ctx1 = nullcontext()
-        ctx2 = pytest.warns(AstropyUserWarning)
-    else:
-        ctx1 = ctx2 = pytest.warns(AstropyDeprecationWarning)
-
-    with ctx1, pytest.warns(AstropyUserWarning) as w:
+    with pytest.warns(AstropyDeprecationWarning), pytest.warns(AstropyUserWarning) as w:
         assert test(x=1, y=2, z=3, b=3) == (1, 3, 3)
     assert len(w) == 4
 
-    with ctx1, pytest.warns(AstropyUserWarning) as w:
+    with pytest.warns(AstropyDeprecationWarning), pytest.warns(AstropyUserWarning) as w:
         assert test(x=1, y=2, z=3, a=3) == (3, 2, 3)
     assert len(w) == 4
 
-    with pytest.raises(TypeError), ctx2:
+    with pytest.raises(TypeError), pytest.warns(AstropyDeprecationWarning):
         assert test(x=1, y=2, z=3, c=5) == (1, 2, 5)
 
 
@@ -614,7 +598,8 @@ def test_classproperty_docstring():
 
             return 1
 
-    assert A.__dict__["foo"].__doc__ == "The foo."
+    expected_doc = "The foo." if sys.flags.optimize < 2 else None
+    assert inspect.getdoc(A.__dict__["foo"]) == expected_doc
 
     class B:
         # Use doc passed to classproperty constructor
@@ -623,7 +608,10 @@ def test_classproperty_docstring():
 
         foo = classproperty(_get_foo, doc="The foo.")
 
-    assert B.__dict__["foo"].__doc__ == "The foo."
+    # we should *always* get a string back by setting the doc argument.
+    # As of Python 3.13, this is in line with how the builtin @property decorator
+    # interacts with PYTHONOPTIMIZE=2
+    assert inspect.getdoc(B.__dict__["foo"]) == "The foo."
 
 
 @pytest.mark.slow
@@ -682,18 +670,9 @@ def test_lazyproperty_threadsafe(fast_thread_switching):
             assert values == [a.foo] * workers
 
 
+@_skip_docstring_tests_with_optimized_python
 def test_format_doc_stringInput_simple():
     # Simple tests with string input
-
-    docstring_fail = ""
-
-    # Raises an valueerror if input is empty
-    with pytest.raises(ValueError):
-
-        @format_doc(docstring_fail)
-        def testfunc_fail():
-            pass
-
     docstring = "test"
 
     # A first test that replaces an empty docstring
@@ -701,27 +680,21 @@ def test_format_doc_stringInput_simple():
     def testfunc_1():
         pass
 
-    assert inspect.getdoc(testfunc_1) == docstring
+    assert inspect.getdoc(testfunc_1) == "test"
 
     # Test that it replaces an existing docstring
     @format_doc(docstring)
     def testfunc_2():
         """not test"""
 
-    assert inspect.getdoc(testfunc_2) == docstring
+    assert inspect.getdoc(testfunc_2) == "test"
 
 
+@_skip_docstring_tests_with_optimized_python
 def test_format_doc_stringInput_format():
     # Tests with string input and formatting
 
     docstring = "yes {0} no {opt}"
-
-    # Raises an indexerror if not given the formatted args and kwargs
-    with pytest.raises(IndexError):
-
-        @format_doc(docstring)
-        def testfunc1():
-            pass
 
     # Test that the formatting is done right
     @format_doc(docstring, "/", opt="= life")
@@ -744,16 +717,6 @@ def test_format_doc_stringInput_format():
 def test_format_doc_objectInput_simple():
     # Simple tests with object input
 
-    def docstring_fail():
-        pass
-
-    # Self input while the function has no docstring raises an error
-    with pytest.raises(ValueError):
-
-        @format_doc(docstring_fail)
-        def testfunc_fail():
-            pass
-
     def docstring0():
         """test"""
 
@@ -772,18 +735,12 @@ def test_format_doc_objectInput_simple():
     assert inspect.getdoc(testfunc_2) == inspect.getdoc(docstring0)
 
 
+@_skip_docstring_tests_with_optimized_python
 def test_format_doc_objectInput_format():
     # Tests with object input and formatting
 
     def docstring():
         """test {0} test {opt}"""
-
-    # Raises an indexerror if not given the formatted args and kwargs
-    with pytest.raises(IndexError):
-
-        @format_doc(docstring)
-        def testfunc_fail():
-            pass
 
     # Test that the formatting is done right
     @format_doc(docstring, "+", opt="= 2 * test")
@@ -804,15 +761,9 @@ def test_format_doc_objectInput_format():
     assert inspect.getdoc(testfunc3) == "test + test = 4 / 2 * test"
 
 
+@_skip_docstring_tests_with_optimized_python
 def test_format_doc_selfInput_simple():
     # Simple tests with self input
-
-    # Self input while the function has no docstring raises an error
-    with pytest.raises(ValueError):
-
-        @format_doc(None)
-        def testfunc_fail():
-            pass
 
     # Test that it keeps an existing docstring
     @format_doc(None)
@@ -822,15 +773,9 @@ def test_format_doc_selfInput_simple():
     assert inspect.getdoc(testfunc_1) == "not test"
 
 
+@_skip_docstring_tests_with_optimized_python
 def test_format_doc_selfInput_format():
     # Tests with string input which is '__doc__' (special case) and formatting
-
-    # Raises an indexerror if not given the formatted args and kwargs
-    with pytest.raises(IndexError):
-
-        @format_doc(None)
-        def testfunc_fail():
-            """dum {0} dum {opt}"""
 
     # Test that the formatting is done right
     @format_doc(None, "di", opt="da dum")
@@ -848,6 +793,7 @@ def test_format_doc_selfInput_format():
     assert inspect.getdoc(testfunc2) == "dum di dum "
 
 
+@_skip_docstring_tests_with_optimized_python
 def test_format_doc_onMethod():
     # Check if the decorator works on methods too, to spice it up we try double
     # decorator
@@ -862,6 +808,7 @@ def test_format_doc_onMethod():
     assert inspect.getdoc(TestClass.test_method) == "what we do is strange."
 
 
+@_skip_docstring_tests_with_optimized_python
 def test_format_doc_onClass():
     # Check if the decorator works on classes too
     docstring = "what we do {__doc__} {0}{opt}"
@@ -871,3 +818,41 @@ def test_format_doc_onClass():
         """is"""
 
     assert inspect.getdoc(TestClass) == "what we do is strange."
+
+
+@_skip_docstring_tests_with_optimized_python
+@pytest.mark.parametrize(
+    "docstring, expected_exception",
+    [
+        # Raises an valueerror if input is empty
+        pytest.param("", ValueError, id="empty string"),
+        # Raises an indexerror if not given the formatted args and kwargs
+        pytest.param("yes {0} no {opt}", IndexError, id="missing args or kwargs (str)"),
+        # Self input while the function has no docstring raises an error
+        pytest.param(lambda: None, ValueError, id="function without a docstring"),
+        # Self input while the function has no docstring raises an error
+        pytest.param(None, ValueError, id="None"),
+    ],
+)
+def test_format_doc_exceptions(docstring, expected_exception):
+    with pytest.raises(expected_exception):
+
+        @format_doc(docstring)
+        def testfunc_fail():
+            pass
+
+
+@_skip_docstring_tests_with_optimized_python
+def test_format_doc_indexerrors():
+    def _FUNC_WITH_TEMPLATE_DOCSTRING():
+        """test {0} test {opt}"""
+
+    # Raises an indexerror if not given the formatted args and kwargs
+    with pytest.raises(IndexError):
+
+        @format_doc(_FUNC_WITH_TEMPLATE_DOCSTRING)
+        def testfunc_fail():
+            pass
+
+    with pytest.raises(IndexError):
+        format_doc(None)(_FUNC_WITH_TEMPLATE_DOCSTRING)

@@ -7,10 +7,10 @@ import numpy as np
 from .utils import deserialize_class
 
 __all__ = [
-    "values_to_high_level_objects",
-    "high_level_objects_to_values",
     "BaseHighLevelWCS",
     "HighLevelWCSMixin",
+    "high_level_objects_to_values",
+    "values_to_high_level_objects",
 ]
 
 
@@ -46,8 +46,15 @@ def _toindex(value):
     >>> _toindex(np.array([1.5, 2.49999]))
     array([2, 2])
     """
-    indx = np.asarray(np.floor(np.asarray(value) + 0.5), dtype=int)
-    return indx
+    arr = np.floor(np.asarray(value) + 0.5)
+
+    fill_value = np.iinfo(int).min
+    if np.isscalar(arr):
+        if np.isnan(arr):
+            arr = fill_value
+    else:
+        arr[np.isnan(arr)] = fill_value
+    return np.asarray(arr, dtype=int)
 
 
 class BaseHighLevelWCS(metaclass=abc.ABCMeta):

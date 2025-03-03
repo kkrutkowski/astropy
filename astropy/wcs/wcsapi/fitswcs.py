@@ -20,7 +20,7 @@ from .high_level_api import HighLevelWCSMixin
 from .low_level_api import BaseLowLevelWCS
 from .wrappers import SlicedLowLevelWCS
 
-__all__ = ["custom_ctype_to_ucd_mapping", "SlicedFITSWCS", "FITSWCSAPIMixin"]
+__all__ = ["FITSWCSAPIMixin", "SlicedFITSWCS", "custom_ctype_to_ucd_mapping"]
 
 C_SI = c.si.value
 
@@ -132,7 +132,7 @@ CTYPE_TO_UCD1 = {
     "VRAD": "spect.dopplerVeloc.radio",  # Radio velocity
     "VOPT": "spect.dopplerVeloc.opt",  # Optical velocity
     "ZOPT": "src.redshift",  # Redshift
-    "AWAV": "em.wl",  # Air wavelength
+    "AWAV": "em.wl;obs.atmos",  # Air wavelength
     "VELO": "spect.dopplerVeloc",  # Apparent radial velocity
     "BETA": "custom:spect.doplerVeloc.beta",  # Beta factor (v/c)
     "STOKES": "phys.polarization.stokes",  # STOKES parameters

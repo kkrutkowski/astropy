@@ -8,7 +8,7 @@ from astropy.utils.decorators import lazyproperty
 
 from .base import BaseWCSWrapper
 
-__all__ = ["sanitize_slices", "SlicedLowLevelWCS"]
+__all__ = ["SlicedLowLevelWCS", "sanitize_slices"]
 
 
 def sanitize_slices(slices, ndim):
@@ -174,7 +174,7 @@ class SlicedLowLevelWCS(BaseWCSWrapper):
                 continue
 
             if "world_axis_object_classes" not in dropped_info:
-                dropped_info["world_axis_object_classes"] = dict()
+                dropped_info["world_axis_object_classes"] = {}
 
             wao_classes = self._wcs.world_axis_object_classes
             wao_components = self._wcs.world_axis_object_components

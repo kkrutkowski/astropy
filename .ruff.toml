@@ -1,7 +1,7 @@
 extend = "pyproject.toml"
 lint.ignore = [
     # NOTE: to find a good code to fix, run:
-    # ruff --select="ALL" --statistics astropy/<subpackage>
+    # ruff check --select="ALL" --statistics astropy/<subpackage>
 
     # flake8-annotations (ANN) : static typing
     "ANN001",  # Function argument without type annotation
@@ -87,7 +87,6 @@ lint.ignore = [
     "N801",  # invalid-class-name
     "N802",  # invalid-function-name
     "N803",  # invalid-argument-name
-    "N804",  # invalid-first-argument-name-for-class-method
     "N805",  # invalid-first-argument-name-for-method
     "N807",  # dunder-function-name
     "N813",  # camelcase-imported-as-lowercase
@@ -103,7 +102,6 @@ lint.ignore = [
     "PERF401",  # Use a list comprehension to create a transformed list
 
     # Pylint (PLC, PLE, PLR, PLW)
-    "PLE0101",  # return-in-init
     "PLR0124",  # Name compared with itself
     "PLR0402",  # ConsiderUsingFromImport
     "PLR0912",  # too-many-branches
@@ -117,14 +115,12 @@ lint.ignore = [
 
     # flake8-pytest-style (PT)
     "PT003",   # pytest-extraneous-scope-function
-    "PT004",   # pytest-missing-fixture-name-underscore # deprecated in ruff 0.6.0
     "PT006",   # pytest-parametrize-names-wrong-type
     "PT007",   # pytest-parametrize-values-wrong-type
     "PT011",   # pytest-raises-too-broad
     "PT012",   # pytest-raises-with-multiple-statements
     "PT017",   # pytest-assert-in-exceptinstead
     "PT018",   # pytest-composite-assertion
-    "PT022",   # pytest-useless-yield-fixture
 
     # flake8-return (RET)
     "RET501",  # unnecessary-return-none
@@ -194,7 +190,7 @@ lint.unfixable = [
 ]
 
 [lint.extend-per-file-ignores]
-"__init__.py" = ["E402", "F401", "F403"]
+"__init__.py" = ["F401"]
 "test_*.py" = [
     "PTH", # all flake8-use-pathlib
     "RUF015",  # Prefer next({iterable}) over single element slice
@@ -204,20 +200,13 @@ lint.unfixable = [
 # is better to fix for subpackages individually. The general exclusion should be
 # copied to these subpackage sections and fixed there.
 "astropy/config/*" = []
-"astropy/constants/*" = [
-    "N817",    # camelcase-imported-as-acronym
-    "RET505",  # superfluous-else-return
-]
-"astropy/convolution/*" = [
-    "PLR0911",  # too-many-return-statements
-]
+"astropy/constants/*" = []
+"astropy/convolution/*" = []
 "astropy/coordinates/*" = [
     "PTH",     # all flake8-use-pathlib
     "DTZ007",  # call-datetime-strptime-without-zone
-    "RET505",  # superfluous-else-return
 ]
 "astropy/cosmology/*" = [
-    "C408",  # unnecessary-collection-call
     "PT019",   # pytest-fixture-param-without-value
 ]
 "astropy/io/*" = [
@@ -226,6 +215,7 @@ lint.unfixable = [
     "PLR0911",  # too-many-return-statements
     "PTH116",  # os-stat
     "PTH117",  # os-path-isabs
+    "S314",  # defusedxml
     "SLOT000",  # Subclasses of `str` should define `__slots__`
     "TD005",  # Missing issue description after `TODO`
     "TRY400",  # error-instead-of-exception
@@ -244,19 +234,14 @@ lint.unfixable = [
 "astropy/io/votable/*" = [
     "PTH",
 ]
-"astropy/logger.py" = [
-    "C408",
-    "RET505",
-]
+"astropy/logger.py" = []
 "astropy/modeling/*" = [
     "PLR0911",  # too-many-return-statements
     "SLOT001",  # Subclasses of `tuple` should define `__slots__`
     "TRY300",  # Consider `else` block
     "F811",  # see https://github.com/astropy/astropy/pull/16633
 ]
-"astropy/nddata/*" = [
-    "C408",
-]
+"astropy/nddata/*" = []
 "astropy/samp/*" = [
     "PTH",      # all flake8-use-pathlib
 ]
@@ -268,9 +253,7 @@ lint.unfixable = [
     "TRY300",  # Consider `else` block
 ]
 "astropy/tests/*" = [
-    "C408",
     "PTH",      # all flake8-use-pathlib
-    "RET505"
 ]
 "astropy/time/*" = [
     "FIX003",  # Line contains XXX.  replace XXX with TODO
@@ -284,9 +267,7 @@ lint.unfixable = [
     "PLR0911",  # too-many-return-statements
     "TRY300",  # Consider `else` block
 ]
-"astropy/uncertainty/*" = [
-    "C408",
-]
+"astropy/uncertainty/*" = []
 "astropy/utils/*" = [
     "N811",  # constant-imported-as-non-constant
     "PLR0911",  # too-many-return-statements
@@ -299,7 +280,6 @@ lint.unfixable = [
     "PLR0911",  # too-many-return-statements
 ]
 "astropy/wcs/*" = [
-    "C408",  # unnecessary-collection-call
     "F821",  # undefined-name
     "PTH",      # all flake8-use-pathlib
     "S608",  # Posslibe SQL injection
@@ -307,6 +287,14 @@ lint.unfixable = [
     "TRY300",  # Consider `else` block
 ]
 "docs/*" = []
-"examples/coordinates/*" = []
 
 ".pyinstaller/*.py" = ["PTH"]
+
+
+[lint.flake8-import-conventions.aliases]
+# xml is hardly ever used thus the alias should not be mandated
+# There is no way to remove from the default list, only to override
+# the default thus we list the things here that we actually should use.
+"numpy" = "np"
+"matplotlib" = "mpl"
+"matplotlib.pyplot" = "plt"

@@ -201,8 +201,10 @@ column where each row element is itself a two-element array.
     ...
   KeyError: 'a_new'
 
-Row Data
---------
+.. _Row data:
+
+List of Rows
+------------
 
 Row-oriented data can be used to create a table using the ``rows``
 keyword argument.
@@ -720,10 +722,10 @@ meta
 ----
 
 The ``meta`` argument is an object that contains metadata associated with the
-table. It is recommended that this object be a :class:`dict` or
-:class:`~collections.OrderedDict`, but the only firm requirement is that it can
+table. It is recommended that this object be a :class:`dict`, but the
+only firm requirement is that it *must be a dict-like mapping* and can
 be copied with the standard library :func:`copy.deepcopy` routine. By
-default, ``meta`` is an empty :class:`~collections.OrderedDict`.
+default, ``meta`` is an empty :class:`dict`.
 
 copy
 ----

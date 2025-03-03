@@ -1,6 +1,7 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 """Regression tests for the units package."""
 
+import itertools
 import operator
 import pickle
 from contextlib import nullcontext
@@ -12,9 +13,8 @@ from numpy.testing import assert_allclose
 
 from astropy import constants as c
 from astropy import units as u
-from astropy.tests.helper import PYTEST_LT_8_0
 from astropy.units import utils
-from astropy.utils.compat.optional_deps import HAS_DASK
+from astropy.utils.compat.optional_deps import HAS_ARRAY_API_STRICT, HAS_DASK
 from astropy.utils.exceptions import AstropyDeprecationWarning
 
 FLOAT_EPS = np.finfo(float).eps
@@ -36,7 +36,6 @@ def test_initialisation():
     assert u.Unit("") == u.dimensionless_unscaled
     assert u.one == u.dimensionless_unscaled
     assert u.Unit("10 m") == ten_meter
-    assert u.Unit(10.0) == u.CompositeUnit(10.0, [], [])
 
     assert u.Unit() == u.dimensionless_unscaled
 
@@ -81,18 +80,31 @@ def test_invalid_compare():
     assert not (u.m == u.s)
 
 
-def test_convert():
-    assert u.h.get_converter(u.s)(1) == 3600
+@pytest.mark.parametrize(
+    "original,expectation",
+    [
+        pytest.param(1, 3600.0, id="small_int"),
+        pytest.param(2.0, 7200.0, id="small_float"),
+        pytest.param(10**25, 3.6e28, id="large_int"),
+        pytest.param(3e25, 1.08e29, id="large_float"),
+    ],
+)
+def test_convert(original, expectation):
+    result = u.h.get_converter(u.s)(original)
+    assert_allclose(result, expectation, rtol=1e-15, atol=0)
+    assert type(result) is float
 
 
 def test_convert_roundtrip():
     c1 = u.cm.get_converter(u.m)
     c2 = u.m.get_converter(u.cm)
-    np.isclose(c1(c2(10.0)), c2(c1(10.0)), atol=0, rtol=1e-15)
+    assert_allclose(c1(c2(10.0)), c2(c1(10.0)), rtol=1e-15, atol=0)
 
+
+def test_convert_roundtrip_with_equivalency():
     c1 = u.arcsec.get_converter(u.pc, u.parallax())
     c2 = u.pc.get_converter(u.arcsec, u.parallax())
-    np.isclose(c1(c2(10.0)), c2(c1(10.0)), atol=0, rtol=1e-15)
+    assert_allclose(c1(c2(10.0)), c2(c1(10.0)), rtol=1e-15, atol=0)
 
 
 def test_convert_fail():
@@ -142,12 +154,6 @@ def test_units_conversion():
     assert_allclose(u.AU.to(u.pc), 4.84813681e-6)
     assert_allclose(u.cycle.to(u.rad), 6.283185307179586)
     assert_allclose(u.spat.to(u.sr), 12.56637061435917)
-
-
-def test_units_manipulation():
-    # Just do some manipulation and check it's happy
-    (u.kpc * u.yr) ** Fraction(1, 3) / u.Myr
-    (u.AA * u.erg) ** 9
 
 
 def test_decompose():
@@ -261,20 +267,15 @@ def test_parse_strict_noncritical_error(parse_strict, expectation):
 
 
 def test_parse_strict_noncritical_error_default():
-    if PYTEST_LT_8_0:
-        # pytest < 8 does not know how to deal with `Exception.add_note`
-        match = (
-            r"^if 'm\(s\)' was meant to be a multiplication, it should have been "
-            r"written as 'm \(s\)'\.$"
-        )
-    else:
-        match = (
+    with pytest.raises(
+        ValueError,
+        match=(
             r"^if 'm\(s\)' was meant to be a multiplication, it should have been "
             r"written as 'm \(s\)'\.\n"
             "If you cannot change the unit string then try specifying the "
             r"'parse_strict' argument\.$"
-        )
-    with pytest.raises(ValueError, match=match):
+        ),
+    ):
         assert u.Unit("m(s)", format="ogip")
 
 
@@ -571,15 +572,10 @@ def test_compose_no_duplicates():
     assert len(composed) == 1
 
 
-def test_long_int():
-    """
-    Issue #672
-    """
-    sigma = 10**21 * u.M_p / u.cm**2
-    sigma.to(u.M_sun / u.pc**2)
-
-
-def test_endian_independence():
+@pytest.mark.parametrize(
+    "dtype", tuple(map("".join, itertools.product("<>", "if", "48")))
+)
+def test_endian_independence(dtype):
     """
     Regression test for #744
 
@@ -587,11 +583,8 @@ def test_endian_independence():
     converted because the dtype is '>f4', not 'float32', and the code was
     looking for the strings 'float' or 'int'.
     """
-    for endian in ["<", ">"]:
-        for ntype in ["i", "f"]:
-            for byte in ["4", "8"]:
-                x = np.array([1, 2, 3], dtype=(endian + ntype + byte))
-                u.m.to(u.cm, x)
+    x = np.array([1, 2, 3], dtype=dtype)
+    assert u.m.to(u.cm, x).tolist() == [100.0, 200.0, 300.0]
 
 
 def test_radian_base():
@@ -712,7 +705,7 @@ def test_pickle_unrecognized_unit():
     Issue #2047
     """
     a = u.Unit("asdf", parse_strict="silent")
-    pickle.loads(pickle.dumps(a))
+    assert isinstance(pickle.loads(pickle.dumps(a)), u.UnrecognizedUnit)
 
 
 def test_duplicate_define():
@@ -732,9 +725,23 @@ def test_repr_latex():
 
 
 def test_operations_with_strings():
-    assert u.m / "5s" == (u.m / (5.0 * u.s))
+    with pytest.warns(
+        AstropyDeprecationWarning,
+        match=(
+            "^divisions involving a unit and a 'str' instance are deprecated since "
+            r"v7\.1\. Convert '5s' to a unit explicitly\.$"
+        ),
+    ):
+        assert u.m / "5s" == (u.m / (5.0 * u.s))
 
-    assert u.m * "5s" == (5.0 * u.m * u.s)
+    with pytest.warns(
+        AstropyDeprecationWarning,
+        match=(
+            "^products involving a unit and a 'str' instance are deprecated since "
+            r"v7\.1\. Convert '5s' to a unit explicitly\.$"
+        ),
+    ):
+        assert u.m * "5s" == (5.0 * u.m * u.s)
 
 
 def test_comparison():
@@ -751,23 +758,35 @@ def test_compose_into_arbitrary_units():
     # Issue #1438
     from astropy.constants import G
 
-    G.decompose([u.kg, u.km, u.Unit("15 s")])
+    G_decomposed = G.decompose([u.kg, u.km, u.Unit("100 s")])
+    assert_allclose(G_decomposed.unit.scale, 1e-4)
+    assert G_decomposed == G
 
 
 def test_unit_multiplication_with_string():
-    """Check that multiplication with strings produces the correct unit."""
-    u1 = u.cm
-    us = "kg"
-    assert us * u1 == u.Unit(us) * u1
-    assert u1 * us == u1 * u.Unit(us)
+    with pytest.warns(
+        AstropyDeprecationWarning,
+        match=(
+            "^products involving a unit and a 'str' instance are deprecated since "
+            r"v7\.1\. Convert 'kg' to a unit explicitly\.$"
+        ),
+    ):
+        assert "kg" * u.cm == u.kg * u.cm
+    with pytest.warns(AstropyDeprecationWarning, match="^products involving .* 'str'"):
+        assert u.cm * "kg" == u.cm * u.kg
 
 
 def test_unit_division_by_string():
-    """Check that multiplication with strings produces the correct unit."""
-    u1 = u.cm
-    us = "kg"
-    assert us / u1 == u.Unit(us) / u1
-    assert u1 / us == u1 / u.Unit(us)
+    with pytest.warns(
+        AstropyDeprecationWarning,
+        match=(
+            "^divisions involving a unit and a 'str' instance are deprecated since "
+            r"v7\.1\. Convert 'kg' to a unit explicitly\.$"
+        ),
+    ):
+        assert "kg" / u.cm == u.kg / u.cm
+    with pytest.warns(AstropyDeprecationWarning, match="^divisions involving .* 'str'"):
+        assert u.cm / "kg" == u.cm / u.kg
 
 
 def test_sorted_bases():
@@ -1009,45 +1028,111 @@ def test_raise_to_negative_power():
 
 
 @pytest.mark.parametrize(
-    "name, symbol, multiplying_factor",
+    "name, factor",
     [
-        ("quetta", "Q", 1e30),
-        ("ronna", "R", 1e27),
-        ("yotta", "Y", 1e24),
-        ("zetta", "Z", 1e21),
-        ("exa", "E", 1e18),
-        ("peta", "P", 1e15),
-        ("tera", "T", 1e12),
-        ("giga", "G", 1e9),
-        ("mega", "M", 1e6),
-        ("kilo", "k", 1e3),
-        ("deca", "da", 1e1),
-        ("deci", "d", 1e-1),
-        ("centi", "c", 1e-2),
-        ("milli", "m", 1e-3),
-        ("micro", "u", 1e-6),
-        ("nano", "n", 1e-9),
-        ("pico", "p", 1e-12),
-        ("femto", "f", 1e-15),
-        ("atto", "a", 1e-18),
-        ("zepto", "z", 1e-21),
-        ("yocto", "y", 1e-24),
-        ("ronto", "r", 1e-27),
-        ("quecto", "q", 1e-30),
+        pytest.param(name, factor, id=name)
+        for name, factor in [
+            ("quetta", 1e30),
+            ("ronna", 1e27),
+            ("yotta", 1e24),
+            ("zetta", 1e21),
+            ("exa", 1e18),
+            ("peta", 1e15),
+            ("tera", 1e12),
+            ("giga", 1e9),
+            ("mega", 1e6),
+            ("kilo", 1e3),
+            ("deca", 1e1),
+            ("deka", 1e1),  # American spelling of deca
+            ("deci", 1e-1),
+            ("centi", 1e-2),
+            ("milli", 1e-3),
+            ("micro", 1e-6),
+            ("nano", 1e-9),
+            ("pico", 1e-12),
+            ("femto", 1e-15),
+            ("atto", 1e-18),
+            ("zepto", 1e-21),
+            ("yocto", 1e-24),
+            ("ronto", 1e-27),
+            ("quecto", 1e-30),
+        ]
     ],
 )
-def test_si_prefixes(name, symbol, multiplying_factor):
-    base = 1 * u.g
-
-    quantity_from_symbol = base.to(f"{symbol}g")
-    quantity_from_name = base.to(f"{name}gram")
-
+def test_si_prefix_names(name, factor):
+    base = 1 * u.s
+    quantity_from_name = base.to(f"{name}second")
     assert u.isclose(quantity_from_name, base)
+    assert np.isclose(base.value / quantity_from_name.value, factor, atol=0)
+
+
+@pytest.mark.parametrize(
+    "symbol, factor",
+    [
+        pytest.param(symbol, factor, id=symbol)
+        for symbol, factor in [
+            ("Q", 1e30),
+            ("R", 1e27),
+            ("Y", 1e24),
+            ("Z", 1e21),
+            ("E", 1e18),
+            ("P", 1e15),
+            ("T", 1e12),
+            ("G", 1e9),
+            ("M", 1e6),
+            ("k", 1e3),
+            ("da", 1e1),
+            ("d", 1e-1),
+            ("c", 1e-2),
+            ("m", 1e-3),
+            ("\N{MICRO SIGN}", 1e-6),
+            ("\N{GREEK SMALL LETTER MU}", 1e-6),
+            ("u", 1e-6),
+            ("n", 1e-9),
+            ("p", 1e-12),
+            ("f", 1e-15),
+            ("a", 1e-18),
+            ("z", 1e-21),
+            ("y", 1e-24),
+            ("r", 1e-27),
+            ("q", 1e-30),
+        ]
+    ],
+)
+def test_si_prefix_symbols(symbol, factor):
+    base = 1 * u.m
+    quantity_from_symbol = base.to(f"{symbol}m")
     assert u.isclose(quantity_from_symbol, base)
+    assert np.isclose(base.value / quantity_from_symbol.value, factor, atol=0)
 
-    value_ratio = base.value / quantity_from_symbol.value
 
-    assert u.isclose(value_ratio, multiplying_factor)
+@pytest.mark.parametrize(
+    "name,symbol,factor",
+    [
+        pytest.param(name, symbol, factor, id=name)
+        for name, symbol, factor in [
+            ("kibi", "Ki", 2**10),
+            ("mebi", "Mi", 2**20),
+            ("gibi", "Gi", 2**30),
+            ("tebi", "Ti", 2**40),
+            ("pebi", "Pi", 2**50),
+            ("exbi", "Ei", 2**60),
+            # We now switch to float factors because with numpy < 2.0
+            # np.isclose() doesn't like ints this large
+            ("zebi", "Zi", 2.0**70),
+            ("yobi", "Yi", 2.0**80),
+        ]
+    ],
+)
+def test_si_binary_prefixes(name, symbol, factor):
+    base = 1 * u.byte
+    quantity_from_name = base.to(f"{name}byte")
+    assert u.isclose(quantity_from_name, base)
+    assert np.isclose(base.value / quantity_from_name.value, factor, atol=0)
+
+    quantity_from_symbol = base.to(f"{symbol}B")
+    assert u.isclose(quantity_from_symbol, base)
+    assert np.isclose(base.value / quantity_from_symbol.value, factor, atol=0)
 
 
 def test_cm_uniqueness():
@@ -1063,6 +1148,42 @@ def test_hash_represents_unit(unit, power):
     assert hash(tu) == hash(unit)
     tu2 = (unit ** (1 / power)) ** power
     assert hash(tu2) == hash(unit)
+
+
+@pytest.mark.parametrize(
+    "scale1, scale2",
+    [
+        (10, 10.0),
+        (2, Fraction(2, 1)),
+        (4, 4 + 0j),
+        (0.5, Fraction(1, 2)),
+        (2.4, 2.4 + 0j),
+        (Fraction(1, 4), 0.25 + 0j),
+    ],
+    ids=type,
+)
+def test_hash_scale_type(scale1, scale2):
+    # Regression test for #17820 - hash could depend on scale type, not just its value
+    unit1 = u.CompositeUnit(scale1, [u.m], [-1])
+    unit2 = u.CompositeUnit(scale2, [u.m], [-1])
+    assert unit1 == unit2
+    assert hash(unit1) == hash(unit2)
+
+
+@pytest.mark.skipif(not HAS_ARRAY_API_STRICT, reason="tests array_api_strict")
+def test_array_api_strict_arrays():
+    # Ensure strict array api arrays can be passed in/out of Unit.to()
+    # Note that those have non-standard dtype.
+    import array_api_strict as xp
+
+    data1 = xp.asarray([1.0, 2.0, 3.0])
+    data2 = u.m.to(u.km, value=data1)
+    assert isinstance(data2, type(data1))
+    assert_allclose(data2, [0.001, 0.002, 0.003])
+
+    data3 = u.K.to(u.deg_C, value=data1, equivalencies=u.temperature())
+    assert isinstance(data3, type(data1))
+    assert_allclose(data3, [-272.15, -271.15, -270.15])
 
 
 @pytest.mark.skipif(not HAS_DASK, reason="tests dask.array")
@@ -1120,3 +1241,22 @@ def test_error_on_conversion_of_zero_to_unit():
 )
 def test_scale_sanitization(unsanitized, sanitized):
     assert u.CompositeUnit(unsanitized, [u.m], [1]).scale == sanitized
+
+
+@pytest.mark.parametrize(
+    "scale",
+    [
+        5,
+        10.0,
+        7 + 3j,
+        Fraction(1, 3),
+        np.int32(100),
+        np.float32(0.01),
+        np.complex128(1 - 4j),
+    ],
+    ids=type,
+)
+def test_dimensionless_scale_factor_types(scale):
+    # Regression test for #17355 - Unit did not accept all scale factor
+    # types that CompositeUnit accepted
+    assert u.Unit(scale) == u.CompositeUnit(scale, [], [])

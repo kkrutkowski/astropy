@@ -37,7 +37,7 @@ else:
             raise ImportError("matplotlib is required in order to use this class.")
 
 
-__all__ = ["ImageNormalize", "SimpleNorm", "simple_norm", "imshow_norm"]
+__all__ = ["ImageNormalize", "SimpleNorm", "imshow_norm", "simple_norm"]
 
 __doctest_requires__ = {"*": ["matplotlib"]}
 
@@ -84,13 +84,13 @@ class ImageNormalize(Normalize):
 
     def __init__(
         self,
-        data=None,
-        interval=None,
-        vmin=None,
-        vmax=None,
-        stretch=LinearStretch(),
-        clip=False,
-        invalid=-1.0,
+        data: np.ndarray | None = None,
+        interval: BaseInterval | None = None,
+        vmin: float | None = None,
+        vmax: float | None = None,
+        stretch: BaseStretch = LinearStretch(),
+        clip: bool = False,
+        invalid: float | None = -1.0,
     ):
         # this super call checks for matplotlib
         super().__init__(vmin=vmin, vmax=vmax, clip=clip)

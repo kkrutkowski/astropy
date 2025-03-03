@@ -1031,7 +1031,7 @@ class TestTableFunctions(FitsTestCase):
         """Regression test for https://github.com/astropy/astropy/issues/5280
         and https://github.com/astropy/astropy/issues/5287
 
-        multidimentional tables can now be written with the correct TDIM.
+        multidimensional tables can now be written with the correct TDIM.
         Author: Stephen Bailey.
         """
 
@@ -1155,6 +1155,24 @@ class TestTableFunctions(FitsTestCase):
         assert t1[1].data[2][1] == 500
 
         t1.close()
+
+    def test_row_setitem(self):
+        tbdata = fits.getdata(self.data("tb.fits"))
+        row = tbdata[0]
+        assert row["c1"] == 1
+        assert row["c2"] == "abc"
+
+        row[0] = 2
+        assert row["c1"] == 2
+        row["c1"] = 3
+        assert row["c1"] == 3
+
+        with pytest.raises(IndexError):
+            row[5] = 2
+
+        row[:2] = (12, "xyz")
+        assert row["c1"] == 12
+        assert row["c2"] == "xyz"
 
     def test_fits_record_len(self):
         counts = np.array([312, 334, 308, 317])
@@ -2858,6 +2876,27 @@ class TestTableFunctions(FitsTestCase):
             t3.teardown_class()
         del t3
 
+    @pytest.mark.skipif(not HAVE_OBJGRAPH, reason="requires objgraph")
+    def test_reference_leak_copyhdu(self):
+        """Regression test for https://github.com/astropy/astropy/issues/15649"""
+
+        def readfile(filename):
+            with fits.open(filename) as hdul:
+                hdu = hdul[1].copy()
+
+        with _refcounting("FITS_rec"):
+            readfile(self.data("memtest.fits"))
+
+    def test_converted_copy(self):
+        """
+        Test that the bintable converted arrays are copied when the fitsrec is.
+        Related to https://github.com/astropy/astropy/issues/15649
+        """
+
+        with fits.open(self.data("memtest.fits")) as hdul:
+            data = hdul[1].data.copy()
+            assert data._converted is not hdul[1].data._converted
+
     def test_dump_overwrite(self):
         with fits.open(self.data("table.fits")) as hdul:
             tbhdu = hdul[1]
@@ -3001,6 +3040,9 @@ class TestVLATables(FitsTestCase):
                 q = toto[1].data.field("QUAL_SPE")
                 assert (q[0][4:8] == np.array([0, 0, 0, 0], dtype=np.uint8)).all()
                 assert toto[1].columns[0].format.endswith("J(1571)")
+                # Test BINTableHDU copy
+                copytoto = toto[1].copy()
+                assert (toto[1].data.field("QUAL_SPE")[0][4:8] == q[0][4:8]).all()
 
         for code in ("PJ()", "QJ()"):
             test(code)
@@ -3210,13 +3252,10 @@ class TestVLATables(FitsTestCase):
 
         col = fits.Column(name="MATRIX", format=f"PD({nelem})", unit="", array=matrix)
 
-        t = fits.BinTableHDU.from_columns([col])
-        t.name = "MATRIX"
-
         with pytest.raises(
             ValueError, match="Please consider using the 'Q' format for your file."
         ):
-            t.writeto(self.temp("matrix.fits"))
+            fits.BinTableHDU.from_columns([col])
 
     @pytest.mark.skipif(sys.maxsize < 2**32, reason="requires 64-bit system")
     @pytest.mark.skipif(sys.platform == "win32", reason="Cannot test on Windows")

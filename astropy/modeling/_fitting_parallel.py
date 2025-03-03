@@ -8,6 +8,7 @@ import numpy as np
 
 import astropy.units as u
 from astropy.modeling.utils import _combine_equivalency_dict
+from astropy.nddata import NDUncertainty, StdDevUncertainty, support_nddata
 from astropy.wcs.wcsapi import BaseHighLevelWCS, BaseLowLevelWCS
 from astropy.wcs.wcsapi.wrappers import SlicedLowLevelWCS
 
@@ -19,7 +20,7 @@ def _pixel_to_world_values_block(*pixel, wcs=None):
     Convert a block of pixel values to world values using a WCS. This is for
     use in map_blocks.
     """
-    world = wcs.pixel_to_world_values(*pixel[::-1])[::-1]
+    world = wcs.array_index_to_world_values(*pixel)
     world = np.array(world)
     return world
 
@@ -252,6 +253,7 @@ class ParameterContainer:
         return values[item]
 
 
+@support_nddata(wcs="world", uncertainty="weights", unit="data_unit")
 def parallel_fit_dask(
     *,
     model,
@@ -259,6 +261,7 @@ def parallel_fit_dask(
     data,
     data_unit=None,
     weights=None,
+    mask=None,
     fitting_axes=None,
     world=None,
     chunk_n_max=None,
@@ -292,9 +295,13 @@ def parallel_fit_dask(
     data_units : `astropy.units.Unit`
         Units for the data array, for when the data array is not a ``Quantity``
         instance.
-    weights : `numpy.ndarray` or `dask.array.core.Array`
+    weights : `numpy.ndarray`, `dask.array.core.Array` or `astropy.nddata.NDUncertainty`
         The weights to use in the fitting. See the documentation for specific
         fitters for more information about the meaning of weights.
+        If passed as a `.NDUncertainty` object it will be converted to a
+        `.StdDevUncertainty` and then passed to the fitter as 1 over that.
+    mask : `numpy.ndarray`
+        A boolean mask to be applied to the data.
     fitting_axes : int or tuple
         The axes to keep for the fitting (other axes will be sliced/iterated over)
     world : `None` or tuple or APE-14-WCS
@@ -381,6 +388,17 @@ def parallel_fit_dask(
                 "Can only set preserve_native_chunks=True if input weights is a dask array (if specified)"
             )
 
+    if isinstance(weights, NDUncertainty):
+        weights = weights.represent_as(StdDevUncertainty)
+        weights = 1 / weights.array
+
+    if mask is not None:
+        imask = np.logical_not(mask).astype(float)
+        if weights is None:
+            weights = imask
+        else:
+            weights *= imask
+
     # Sanitize fitting_axes and determine iterating_axes
     ndim = data.ndim
     fitting_axes = tuple([(fi if fi >= 0 else ndim - fi) for fi in fitting_axes])
@@ -460,11 +478,18 @@ def parallel_fit_dask(
 
         # Construct dask arrays of world coordinates for every pixel in the cube.
         # We will then iterate over this in map_blocks.
-        world = _wcs_to_world_dask(world, data.shape, chunks=data.chunksize)
+        # NOTE: This returns in world (cartesian) order
+        world_dask_arrays = _wcs_to_world_dask(world, data.shape, chunks=data.chunksize)
 
         # Extract world arrays for just fitting dimensions
-        world = [world[idx] for idx in fitting_axes]
+        fitting_pixel_axes = np.arange(data.ndim)[::-1][np.array(fitting_axes)]
+        world_idx = [
+            np.argwhere(world.axis_correlation_matrix[:, fpa])[:, 0][0]
+            for fpa in fitting_pixel_axes
+        ]
+        world = [world_dask_arrays[idx] for idx in world_idx]
         world_arrays = True
+
     elif isinstance(world, tuple):
         # If world is a tuple then we allow N inputs where N is the number of fitting_axes
         # Each array in the tuple should with be broadcastable to the shape of the fitting_axes

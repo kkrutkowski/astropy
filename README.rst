@@ -3,7 +3,9 @@
 ----
 
 |Actions Status| |CircleCI Status| |Coverage Status| |PyPI Status| |Documentation Status| |Pre-Commit| |Ruff| |Zenodo|
+
 ----
+
 The Astropy Project is a community effort to develop a
 single core package for astronomy in Python and foster interoperability between
 packages used in the field. This repository contains the core library.
@@ -30,13 +32,7 @@ For more detailed instructions, see the `install guide
 Contributing
 ============
 
-.. raw:: html
-
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://github.com/astropy/repo_stats/blob/cache/cache/astropy_user_stats_dark.png?raw=true">
-      <source media="(prefers-color-scheme: light)" srcset="https://github.com/astropy/repo_stats/blob/cache/cache/astropy_user_stats_light.png?raw=true">
-      <img alt="Astropy user statistics" src="https://github.com/astropy/repo_stats/blob/cache/cache/astropy_user_stats_light.png?raw=true">
-    </picture>
+|User Stats|
 
 The Astropy Project is made both by and for its users, so we welcome and
 encourage contributions of many kinds. Our goal is to keep this a positive,
@@ -88,6 +84,10 @@ Astropy is licensed under a 3-clause BSD style license - see the
 .. |Astropy Logo| image:: https://github.com/astropy/repo_stats/blob/main/dashboard_template/astropy_banner_gray.svg
     :target: https://www.astropy.org/
     :alt: Astropy
+
+.. |User Stats| image:: https://github.com/astropy/repo_stats/blob/cache/cache/astropy_user_stats_light.png
+    :target: https://docs.astropy.org/en/latest/impact_health.html
+    :alt: Astropy User Statistics
 
 .. |Actions Status| image:: https://github.com/astropy/astropy/actions/workflows/ci_workflows.yml/badge.svg
     :target: https://github.com/astropy/astropy/actions

@@ -51,12 +51,12 @@ def _initialize_module():
 
     from . import core
 
+    prefixes = []
     # The CDS format also supports power-of-2 prefixes as defined here:
     # http://physics.nist.gov/cuu/Units/binary.html
-    prefixes = core.si_prefixes + core.binary_prefixes
-
-    # CDS only uses the short prefixes
-    prefixes = [(short, short, factor) for (short, long, factor) in prefixes]
+    for short, long, factor in core.si_prefixes + core.binary_prefixes:
+        short = [s for s in short if s.isascii()]
+        prefixes.append((short, short, factor))  # CDS only uses the short prefixes
 
     # The following units are defined in alphabetical order, directly from
     # here: https://vizier.unistra.fr/viz-bin/Unit
@@ -68,7 +68,7 @@ def _initialize_module():
         (["al"], u.lyr, "Light year", ["c", "d"]),
         (["lyr"], u.lyr, "Light year"),
         (["alpha"], _si.alpha, "Fine structure constant"),
-        ((["AA", "Å"], ["Angstrom", "Angstroem"]), u.AA, "Angstrom"),
+        (["Angstrom", "Å", "Angstroem", "AA"], u.AA, "Angstrom"),
         (["arcmin", "arcm"], u.arcminute, "minute of arc"),
         (["arcsec", "arcs"], u.arcsecond, "second of arc"),
         (["atm"], _si.atm, "atmosphere"),
@@ -119,7 +119,7 @@ def _initialize_module():
         (["mmHg"], 133.322387415 * u.Pa, "millimeter of mercury"),
         (["mol"], u.mol, "mole"),
         (["mp"], _si.m_p, "proton mass"),
-        (["Msun", "solMass"], u.solMass, "solar mass"),
+        (["solMass", "Msun"], u.solMass, "solar mass"),
         ((["mu0", "µ0"], []), _si.mu0, "magnetic constant"),
         (["muB"], _si.muB, "Bohr magneton"),
         (["N"], u.N, "Newton"),

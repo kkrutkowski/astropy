@@ -46,22 +46,22 @@ from .statistic import leastsquare
 from .utils import _combine_equivalency_dict, poly_map_domain
 
 __all__ = [
-    "LinearLSQFitter",
-    "LevMarLSQFitter",
-    "TRFLSQFitter",
     "DogBoxLSQFitter",
-    "LMLSQFitter",
-    "FittingWithOutlierRemoval",
-    "SLSQPLSQFitter",
-    "SimplexLSQFitter",
-    "JointFitter",
     "Fitter",
+    "FittingWithOutlierRemoval",
+    "JointFitter",
+    "LMLSQFitter",
+    "LevMarLSQFitter",
+    "LinearLSQFitter",
     "ModelLinearityError",
     "ModelsError",
+    "SLSQPLSQFitter",
+    "SimplexLSQFitter",
     "SplineExactKnotsFitter",
     "SplineInterpolateFitter",
     "SplineSmoothingFitter",
     "SplineSplrepFitter",
+    "TRFLSQFitter",
     "parallel_fit_dask",
 ]
 
@@ -179,22 +179,6 @@ class UnsupportedConstraintError(ModelsError, ValueError):
     """
 
 
-class _FitterMeta(abc.ABCMeta):
-    """
-    Currently just provides a registry for all Fitter classes.
-    """
-
-    registry = set()
-
-    def __new__(mcls, name, bases, members):
-        cls = super().__new__(mcls, name, bases, members)
-
-        if not inspect.isabstract(cls) and not name.startswith("_"):
-            mcls.registry.add(cls)
-
-        return cls
-
-
 def fitter_unit_support(func):
     """
     This is a decorator that can be used to add support for dealing with
@@ -305,7 +289,7 @@ def fitter_unit_support(func):
     return wrapper
 
 
-class Fitter(metaclass=_FitterMeta):
+class Fitter:
     """
     Base class for all fitters.
 
@@ -317,6 +301,12 @@ class Fitter(metaclass=_FitterMeta):
         Statistic function
 
     """
+
+    _subclass_registry = set()
+
+    def __init_subclass__(cls) -> None:
+        if not (inspect.isabstract(cls) or cls.__name__.startswith("_")):
+            Fitter._subclass_registry.add(cls)
 
     supported_constraints = []
 
@@ -381,10 +371,7 @@ class Fitter(metaclass=_FitterMeta):
         raise NotImplementedError("Subclasses should implement this method.")
 
 
-# TODO: I have ongoing branch elsewhere that's refactoring this module so that
-# all the fitter classes in here are Fitter subclasses.  In the meantime we
-# need to specify that _FitterMeta is its metaclass.
-class LinearLSQFitter(metaclass=_FitterMeta):
+class LinearLSQFitter(Fitter):
     """
     A class performing a linear least square fitting.
     Uses `numpy.linalg.lstsq` to do the fitting.
@@ -1124,7 +1111,7 @@ class FittingWithOutlierRemoval:
         return fitted_model, filtered_data.mask
 
 
-class _NonLinearLSQFitter(metaclass=_FitterMeta):
+class _NonLinearLSQFitter(Fitter):
     """
     Base class for Non-Linear least-squares fitters.
 
@@ -1134,7 +1121,7 @@ class _NonLinearLSQFitter(metaclass=_FitterMeta):
         If the covariance matrix should be computed and set in the fit_info.
         Default: False
     use_min_max_bounds : bool
-        If the set parameter bounds for a model will be enforced each given
+        If set, the parameter bounds for a model will be enforced for each given
         parameter while fitting via a simple min/max condition.
         Default: True
     """
@@ -1148,7 +1135,6 @@ class _NonLinearLSQFitter(metaclass=_FitterMeta):
         self.fit_info = None
         self._calc_uncertainties = calc_uncertainties
         self._use_min_max_bounds = use_min_max_bounds
-        super().__init__()
 
     def objective_function(self, fps, *args, fit_param_indices=None):
         """
@@ -1555,7 +1541,7 @@ class _NLLSQFitter(_NonLinearLSQFitter):
         If the covariance matrix should be computed and set in the fit_info.
         Default: False
     use_min_max_bounds: bool
-        If the set parameter bounds for a model will be enforced each given
+        If set, the parameter bounds for a model will be enforced for each given
         parameter while fitting via a simple min/max condition. A True setting
         will replicate how LevMarLSQFitter enforces bounds.
         Default: False
@@ -1941,7 +1927,7 @@ class SimplexLSQFitter(Fitter):
         return model_copy
 
 
-class JointFitter(metaclass=_FitterMeta):
+class JointFitter(Fitter):
     """
     Fit models which share a parameter.
     For example, fit two gaussians to two data sets but keep
@@ -2161,7 +2147,7 @@ def fitter_to_model_params_array(
     fps :
         The fit parameter values to be assigned
     use_min_max_bounds: bool
-        If the set parameter bounds for model will be enforced on each
+        If set, the parameter bounds for the model will be enforced on each
         parameter with bounds.
         Default: True
     """
@@ -2235,7 +2221,7 @@ def fitter_to_model_params(model, fps, use_min_max_bounds=True):
     fps :
         The fit parameter values to be assigned
     use_min_max_bounds: bool
-        If the set parameter bounds for model will be enforced on each
+        If set, the parameter bounds for the model will be enforced on each
         parameter with bounds.
         Default: True
     """

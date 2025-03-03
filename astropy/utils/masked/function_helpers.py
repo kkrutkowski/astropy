@@ -15,7 +15,7 @@ import warnings
 import numpy as np
 
 from astropy.units.quantity_helper.function_helpers import FunctionAssigner
-from astropy.utils.compat import NUMPY_LT_1_24, NUMPY_LT_2_0, NUMPY_LT_2_1
+from astropy.utils.compat import NUMPY_LT_1_24, NUMPY_LT_2_0, NUMPY_LT_2_1, NUMPY_LT_2_2
 
 if NUMPY_LT_2_0:
     import numpy.core as np_core
@@ -37,9 +37,9 @@ else:
 # such that sphinx can typeset the functions with docstrings.
 # The latter are added to __all__ at the end.
 __all__ = [
-    "MASKED_SAFE_FUNCTIONS",
     "APPLY_TO_BOTH_FUNCTIONS",
     "DISPATCHED_FUNCTIONS",
+    "MASKED_SAFE_FUNCTIONS",
     "UNSUPPORTED_FUNCTIONS",
 ]
 
@@ -99,6 +99,17 @@ SUPPORTED_NEP35_FUNCTIONS = set()
 """Set of supported numpy functions with a 'like' keyword argument that dispatch
 on it (NEP 35).
 """
+if not NUMPY_LT_2_2:
+    # in numpy 2.2 these are auto detected by numpy itself
+    # xref https://github.com/numpy/numpy/issues/27451
+    SUPPORTED_NEP35_FUNCTIONS |= set()
+    UNSUPPORTED_FUNCTIONS |= {
+        np.arange,
+        np.empty, np.ones, np.zeros, np.full,
+        np.array, np.asarray, np.asanyarray, np.ascontiguousarray, np.asfortranarray,
+        np.frombuffer, np.fromfile, np.fromfunction, np.fromiter, np.fromstring,
+        np.require, np.identity, np.eye, np.tri, np.genfromtxt, np.loadtxt,
+    }  # fmt: skip
 
 # Almost all from np.core.fromnumeric defer to methods so are OK.
 MASKED_SAFE_FUNCTIONS |= {
@@ -798,7 +809,7 @@ def _masked_quantile(a, q, axis=None, out=None, **kwargs):
 def _preprocess_quantile(a, q, axis=None, out=None, **kwargs):
     from astropy.utils.masked import Masked
 
-    if isinstance(q, Masked) or out is not None and not isinstance(out, Masked):
+    if isinstance(q, Masked) or (out is not None and not isinstance(out, Masked)):
         raise NotImplementedError
 
     a = Masked(a)

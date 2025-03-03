@@ -50,33 +50,33 @@ if TYPE_CHECKING:
     from typing import Self
 
 __all__ = [
-    "Conf",
-    "conf",
-    "earth_orientation_table",
-    "IERS",
-    "IERS_B",
-    "IERS_A",
-    "IERS_Auto",
-    "FROM_IERS_B",
     "FROM_IERS_A",
     "FROM_IERS_A_PREDICTION",
-    "TIME_BEFORE_IERS_RANGE",
-    "TIME_BEYOND_IERS_RANGE",
+    "FROM_IERS_B",
+    "IERS",
+    "IERS_A",
     "IERS_A_FILE",
+    "IERS_A_README",
     "IERS_A_URL",
     "IERS_A_URL_MIRROR",
-    "IERS_A_README",
+    "IERS_B",
     "IERS_B_FILE",
-    "IERS_B_URL",
     "IERS_B_README",
-    "IERSRangeError",
-    "IERSStaleWarning",
-    "IERSWarning",
-    "IERSDegradedAccuracyWarning",
-    "LeapSeconds",
+    "IERS_B_URL",
     "IERS_LEAP_SECOND_FILE",
     "IERS_LEAP_SECOND_URL",
     "IETF_LEAP_SECOND_URL",
+    "TIME_BEFORE_IERS_RANGE",
+    "TIME_BEYOND_IERS_RANGE",
+    "Conf",
+    "IERSDegradedAccuracyWarning",
+    "IERSRangeError",
+    "IERSStaleWarning",
+    "IERSWarning",
+    "IERS_Auto",
+    "LeapSeconds",
+    "conf",
+    "earth_orientation_table",
 ]
 
 # Status/source values returned by IERS.ut1_utc
@@ -883,6 +883,11 @@ class IERS_Auto(IERS_A):
           In other words the IERS-A table was created by IERS long enough
           ago that it can be considered stale for predictions.
         """
+        # If downloading is disabled, bail out silently.
+        # _check_interpolate_indices() will error later if appropriate.
+        if not conf.auto_download:
+            return
+
         # Pass in initial to np.max to allow things to work for empty mjd.
         max_input_mjd = np.max(mjd, initial=50000)
         now_mjd = self.time_now.mjd

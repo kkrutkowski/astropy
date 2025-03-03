@@ -96,21 +96,21 @@ except ImportError:
 
 
 __all__ = [
-    "Link",
-    "Info",
-    "Values",
-    "Field",
-    "Param",
     "CooSys",
-    "TimeSys",
-    "FieldRef",
-    "ParamRef",
-    "Group",
-    "TableElement",
-    "Resource",
-    "VOTableFile",
     "Element",
+    "Field",
+    "FieldRef",
+    "Group",
+    "Info",
+    "Link",
     "MivotBlock",
+    "Param",
+    "ParamRef",
+    "Resource",
+    "TableElement",
+    "TimeSys",
+    "VOTableFile",
+    "Values",
 ]
 
 
@@ -1675,7 +1675,14 @@ class Field(
     def to_xml(self, w, **kwargs):
         attrib = w.object_attrs(self, self._attr_list)
         if "unit" in attrib:
-            attrib["unit"] = self.unit.to_string("cds")
+            format = _get_unit_format(self._config)
+            try:
+                attrib["unit"] = self.unit.to_string(format)
+            except ValueError as e:
+                # Allow non-standard units with a warning, see
+                # https://github.com/astropy/astropy/issues/17497#issuecomment-2520472495
+                attrib["unit"] = self.unit.to_string()
+                warn_or_raise(W50, W50, (attrib["unit"],), self._config, self._pos)
         with w.tag(self._element_name, attrib=attrib):
             if self.description is not None:
                 w.element("DESCRIPTION", self.description, wrap=True)
@@ -3969,13 +3976,17 @@ class Resource(
                 w.element("DESCRIPTION", self.description, wrap=True)
             if self.mivot_block is not None and self.type == "meta":
                 self.mivot_block.to_xml(w)
-            for element_set in (
+            element_sets = [
                 self.coordinate_systems,
                 self.time_systems,
                 self.params,
                 self.infos,
                 self.links,
-            ):
+            ]
+            if kwargs["version_1_2_or_later"]:
+                element_sets.append(self.groups)
+
+            for element_set in element_sets:
                 for element in element_set:
                     element.to_xml(w, **kwargs)
 
@@ -4375,7 +4386,8 @@ class VOTableFile(Element, _IDProperty, _DescriptionProperty):
                     self.resources,
                 ]
                 if kwargs["version_1_2_or_later"]:
-                    element_sets[0] = self.groups
+                    element_sets.append(self.groups)
+
                 for element_set in element_sets:
                     for element in element_set:
                         element.to_xml(w, **kwargs)

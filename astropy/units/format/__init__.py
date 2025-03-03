@@ -8,15 +8,9 @@ in the :meth:`~astropy.units.UnitBase.to_string` method, i.e.,
 these classes rarely if ever need to be imported directly.
 """
 
-import sys
 import warnings
 
 from astropy.utils.exceptions import AstropyDeprecationWarning
-
-# This is pretty atrocious, but it will prevent a circular import for those
-# formatters that need access to the units.core module An entry for it should
-# exist in sys.modules since astropy.units.core imports this module
-core = sys.modules["astropy.units.core"]
 
 from .base import Base
 from .cds import CDS
@@ -29,14 +23,14 @@ from .unicode_format import Unicode
 from .vounit import VOUnit
 
 __all__ = [
-    "Base",
-    "Generic",
     "CDS",
-    "Console",
     "FITS",
+    "OGIP",
+    "Base",
+    "Console",
+    "Generic",
     "Latex",
     "LatexInline",
-    "OGIP",
     "Unicode",
     "VOUnit",
     "get_format",
@@ -56,7 +50,7 @@ def __getattr__(name):
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-def _known_formats():
+def _known_formats() -> str:
     in_out = [
         name
         for name, cls in Base.registry.items()
@@ -73,7 +67,7 @@ def _known_formats():
     )
 
 
-def get_format(format=None):
+def get_format(format: str | type[Base] | None = None) -> type[Base]:
     """
     Get a formatter by name.
 

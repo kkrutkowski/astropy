@@ -4,6 +4,7 @@
 import copy
 import decimal
 import numbers
+import operator
 import pickle
 from fractions import Fraction
 
@@ -15,7 +16,7 @@ from astropy import units as u
 from astropy.units.quantity import _UNIT_NOT_INITIALISED
 from astropy.utils import isiterable
 from astropy.utils.compat import COPY_IF_NEEDED
-from astropy.utils.exceptions import AstropyWarning
+from astropy.utils.exceptions import AstropyDeprecationWarning, AstropyWarning
 from astropy.utils.masked import Masked
 
 """ The Quantity class will represent a number + unit + uncertainty """
@@ -717,6 +718,14 @@ class TestQuantityOperations:
         # Array quantity
         q = u.Quantity([1.0, 2.0, 3.0], u.m)
         assert np.all(np.array(q) == np.array([1.0, 2.0, 3.0]))
+
+    def test_index(self):
+        val = 123
+        out = operator.index(u.Quantity(val, u.one, dtype=int))
+        assert out == val
+
+        with pytest.raises(TypeError):
+            operator.index(u.Quantity(val, u.m, dtype=int))
 
 
 def test_quantity_conversion():
@@ -1599,16 +1608,33 @@ def test_quantity_initialized_with_quantity():
 
 
 def test_quantity_string_unit():
-    q1 = 1.0 * u.m / "s"
+    with pytest.warns(
+        AstropyDeprecationWarning,
+        match=(
+            "^divisions involving a unit and a 'str' instance are deprecated since "
+            r"v7\.1\. Convert 's' to a unit explicitly\.$"
+        ),
+    ):
+        q1 = 1.0 * u.m / "s"
     assert q1.value == 1
     assert q1.unit == (u.m / u.s)
 
-    q2 = q1 * "m"
+    with pytest.warns(
+        AstropyDeprecationWarning,
+        match=(
+            "^products involving a unit and a 'str' instance are deprecated since "
+            r"v7\.1\. Convert 'm' to a unit explicitly\.$"
+        ),
+    ):
+        q2 = q1 * "m"
     assert q2.unit == ((u.m * u.m) / u.s)
 
 
 def test_quantity_invalid_unit_string():
-    with pytest.raises(ValueError):
+    with (
+        pytest.raises(ValueError),
+        pytest.warns(AstropyDeprecationWarning, match="^products involving .* a 'str'"),
+    ):
         "foo" * u.m
 
 
@@ -2047,7 +2073,7 @@ def test_masked_quantity_str_repr():
 
 class TestQuantitySubclassAboveAndBelow:
     @classmethod
-    def setup_class(self):
+    def setup_class(cls):
         class MyArray(np.ndarray):
             def __array_finalize__(self, obj):
                 super_array_finalize = super().__array_finalize__
@@ -2056,9 +2082,9 @@ class TestQuantitySubclassAboveAndBelow:
                 if hasattr(obj, "my_attr"):
                     self.my_attr = obj.my_attr
 
-        self.MyArray = MyArray
-        self.MyQuantity1 = type("MyQuantity1", (u.Quantity, MyArray), dict(my_attr="1"))
-        self.MyQuantity2 = type("MyQuantity2", (MyArray, u.Quantity), dict(my_attr="2"))
+        cls.MyArray = MyArray
+        cls.MyQuantity1 = type("MyQuantity1", (u.Quantity, MyArray), dict(my_attr="1"))
+        cls.MyQuantity2 = type("MyQuantity2", (MyArray, u.Quantity), dict(my_attr="2"))
 
     def test_setup(self):
         mq1 = self.MyQuantity1(10, u.m)

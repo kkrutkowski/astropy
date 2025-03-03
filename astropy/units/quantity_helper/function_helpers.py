@@ -48,6 +48,7 @@ from astropy.utils.compat import (
     NUMPY_LT_1_24,
     NUMPY_LT_2_0,
     NUMPY_LT_2_1,
+    NUMPY_LT_2_2,
 )
 
 if NUMPY_LT_2_0:
@@ -65,14 +66,22 @@ FUNCTION_HELPERS = {}
 """Functions with implementations usable with proper unit conversion."""
 DISPATCHED_FUNCTIONS = {}
 """Functions for which we provide our own implementation."""
-SUPPORTED_NEP35_FUNCTIONS = {
+
+if NUMPY_LT_2_2:
+    # in numpy 2.2 these are auto detected by numpy itself
     # xref https://github.com/numpy/numpy/issues/27451
-    np.arange,
-    np.empty, np.ones, np.zeros, np.full,
-    np.array, np.asarray, np.asanyarray, np.ascontiguousarray, np.asfortranarray,
-    np.frombuffer, np.fromfile, np.fromfunction, np.fromiter, np.fromstring,
-    np.require, np.identity, np.eye, np.tri, np.genfromtxt, np.loadtxt,
-}  # fmt: skip
+    SUPPORTED_NEP35_FUNCTIONS = {
+        np.arange,
+        np.empty, np.ones, np.zeros, np.full,
+        np.array, np.asarray, np.asanyarray, np.ascontiguousarray, np.asfortranarray,
+        np.frombuffer, np.fromfile, np.fromfunction, np.fromiter, np.fromstring,
+        np.require, np.identity, np.eye, np.tri, np.genfromtxt, np.loadtxt,
+    }  # fmt: skip
+    """Functions that support a 'like' keyword argument and dispatch on it (NEP 35)"""
+else:
+    # When our minimum becomes numpy>=2.2, this can be removed, here and in the tests
+    SUPPORTED_NEP35_FUNCTIONS = set()
+
 """Functions that support a 'like' keyword argument and dispatch on it (NEP 35)"""
 UNSUPPORTED_FUNCTIONS = set()
 """Functions that cannot sensibly be used with quantities."""
@@ -218,7 +227,6 @@ dispatched_function = FunctionAssigner(DISPATCHED_FUNCTIONS)
         np.fft.fft2, np.fft.ifft2, np.fft.rfft2, np.fft.irfft2,
         np.fft.fftn, np.fft.ifftn, np.fft.rfftn, np.fft.irfftn,
         np.fft.hfft, np.fft.ihfft,
-        np.nanstd,  # See comment on nanvar helper.
         np.linalg.eigvals, np.linalg.eigvalsh,
     } | ({np.asfarray} if NUMPY_LT_2_0 else set())  # noqa: NPY201
 )  # fmt: skip
@@ -252,15 +260,45 @@ def like_helper(a, *args, **kwargs):
     return (a.view(np.ndarray),) + args, kwargs, unit, None
 
 
+def _quantity_out_as_array(out):
+    from astropy.units import Quantity
+
+    if isinstance(out, Quantity):
+        return out.view(np.ndarray)
+    else:
+        # TODO: for an ndarray output, one could in principle
+        # try converting the input to dimensionless.
+        raise NotImplementedError
+
+
 # nanvar is safe for Quantity and was previously in SUBCLASS_FUNCTIONS, but it
 # is not safe for Angle, since the resulting unit is inconsistent with being
 # an Angle. By using FUNCTION_HELPERS, the unit gets passed through
 # _result_as_quantity, which will correctly drop to Quantity.
 # A side effect would be that np.nanstd then also produces Quantity; this
-# is avoided by it being helped by invariant_a_helpers above.
+# is avoided by it being helped below.
 @function_helper
-def nanvar(a, *args, **kwargs):
-    return (a.view(np.ndarray),) + args, kwargs, a.unit**2, None
+def nanvar(a, axis=None, dtype=None, out=None, ddof=0, keepdims=np._NoValue, **kwargs):
+    a = _as_quantity(a)
+    out_array = None if out is None else _quantity_out_as_array(out)
+    return (
+        (a.view(np.ndarray), axis, dtype, out_array, ddof, keepdims),
+        kwargs,
+        a.unit**2,
+        out,
+    )
+
+
+@function_helper
+def nanstd(a, axis=None, dtype=None, out=None, ddof=0, keepdims=np._NoValue, **kwargs):
+    a = _as_quantity(a)
+    out_array = None if out is None else _quantity_out_as_array(out)
+    return (
+        (a.view(np.ndarray), axis, dtype, out_array, ddof, keepdims),
+        kwargs,
+        a.unit,
+        out,
+    )
 
 
 @function_helper
@@ -424,15 +462,8 @@ def _quantities2arrays(*args, unit_from_first=False):
 
 def _iterable_helper(*args, out=None, **kwargs):
     """Convert arguments to Quantity, and treat possible 'out'."""
-    from astropy.units import Quantity
-
     if out is not None:
-        if isinstance(out, Quantity):
-            kwargs["out"] = out.view(np.ndarray)
-        else:
-            # TODO: for an ndarray output, we could in principle
-            # try converting all Quantity to dimensionless.
-            raise NotImplementedError
+        kwargs["out"] = _quantity_out_as_array(out)  # raises if not Quantity.
 
     arrays, unit = _quantities2arrays(*args)
     return arrays, kwargs, unit, out
@@ -867,19 +898,13 @@ def cross_like_a_v(a, v, *args, **kwargs):
 
 @function_helper
 def einsum(*operands, out=None, **kwargs):
-    from astropy.units import Quantity
-
     subscripts, *operands = operands
 
     if not isinstance(subscripts, str):
         raise ValueError('only "subscripts" string mode supported for einsum.')
 
     if out is not None:
-        if not isinstance(out, Quantity):
-            raise NotImplementedError
-
-        else:
-            kwargs["out"] = out.view(np.ndarray)
+        kwargs["out"] = _quantity_out_as_array(out)
 
     qs = _as_quantities(*operands)
     unit = functools.reduce(operator.mul, (q.unit for q in qs), dimensionless_unscaled)

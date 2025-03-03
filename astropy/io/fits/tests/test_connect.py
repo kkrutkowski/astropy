@@ -1,5 +1,8 @@
+import contextlib
 import gc
 import warnings
+from io import BytesIO
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -43,10 +46,8 @@ unsupported_cols = {
     name: col
     for name, col in mixin_cols.items()
     if (
-        isinstance(col, Time)
-        and col.location.shape != ()
-        or isinstance(col, np.ndarray)
-        and col.dtype.kind == "O"
+        (isinstance(col, Time) and col.location.shape != ())
+        or (isinstance(col, np.ndarray) and col.dtype.kind == "O")
         or isinstance(col, u.LogQuantity)
     )
 }
@@ -65,6 +66,23 @@ class TestSingleTable:
             list(zip([1, 2, 3, 4], ["a", "b", "c", "d"], [2.3, 4.5, 6.7, 8.9])),
             dtype=[("a", int), ("b", "U1"), ("c", float)],
         )
+
+    def test_overwrite_with_path(self, tmp_path):
+        filename = "temp.fits"
+        t1 = Table(self.data)
+        with contextlib.chdir(tmp_path):
+            t1.write(filename, format="fits")
+            t1.write(Path(filename), format="fits", overwrite=True)
+        t1.write(Path(tmp_path / filename), format="fits", overwrite=True)
+
+    def test_write_to_fileobj(self):
+        # regression test for https://github.com/astropy/astropy/issues/17703
+        t = Table(self.data)
+        buff = BytesIO()
+        t.write(buff, format="fits")
+        buff.seek(0)
+        t2 = Table.read(buff)
+        assert equal_data(t2, t)
 
     def test_simple(self, tmp_path):
         filename = tmp_path / "test_simple.fts"

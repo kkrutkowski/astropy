@@ -58,31 +58,31 @@ from . import _wcs, docstrings
 from .wcsapi.fitswcs import FITSWCSAPIMixin, SlicedFITSWCS
 
 __all__ = [
-    "FITSFixedWarning",
     "WCS",
-    "find_all_wcs",
-    "DistortionLookupTable",
-    "Sip",
-    "Tabprm",
-    "Wcsprm",
     "Auxprm",
     "Celprm",
-    "Prjprm",
-    "Wtbarr",
-    "WCSBase",
-    "validate",
-    "WcsError",
-    "SingularMatrixError",
+    "DistortionLookupTable",
+    "FITSFixedWarning",
     "InconsistentAxisTypesError",
-    "InvalidTransformError",
     "InvalidCoordinateError",
     "InvalidPrjParametersError",
-    "NoSolutionError",
     "InvalidSubimageSpecificationError",
-    "NoConvergence",
-    "NonseparableSubimageCoordinateSystemError",
-    "NoWcsKeywordsFoundError",
     "InvalidTabularParametersError",
+    "InvalidTransformError",
+    "NoConvergence",
+    "NoSolutionError",
+    "NoWcsKeywordsFoundError",
+    "NonseparableSubimageCoordinateSystemError",
+    "Prjprm",
+    "SingularMatrixError",
+    "Sip",
+    "Tabprm",
+    "WCSBase",
+    "WcsError",
+    "Wcsprm",
+    "Wtbarr",
+    "find_all_wcs",
+    "validate",
 ]
 
 
@@ -3531,8 +3531,7 @@ reduce these to 2 dimensions using the naxis kwarg.
             self.sip is not None
             or self.cpdis1 is not None
             or self.cpdis2 is not None
-            or self.det2im1 is not None
-            and self.det2im2 is not None
+            or (self.det2im1 is not None and self.det2im2 is not None)
         )
 
     @property
